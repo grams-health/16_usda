@@ -1,0 +1,12 @@
+{
+  "totalHits": 0,
+  "currentPage": 1,
+  "totalPages": 0,
+  "foodSearchCriteria": {
+    "query": "xyznonexistent",
+    "dataType": ["Foundation"],
+    "pageSize": 25,
+    "pageNumber": 1
+  },
+  "foods": []
+}
