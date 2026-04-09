@@ -54,10 +54,14 @@ def search_foods(query: str, page_size: int = 25) -> list:
             continue
         nutrients = []
         for fn in food.get("foodNutrients", []):
+            try:
+                num = int(float(fn["nutrientNumber"]))
+            except (ValueError, TypeError):
+                continue
             nutrients.append(UsdaNutrient(
-                number=int(fn["nutrientNumber"]),
+                number=num,
                 name=fn["nutrientName"],
-                value=float(fn["value"]),
+                value=float(fn.get("value", 0)),
                 unit=fn["unitName"],
             ))
         results.append(UsdaSearchResult(
@@ -95,8 +99,12 @@ def get_food(fdc_id: int) -> UsdaFoodDetail:
     nutrients = []
     for fn in data.get("foodNutrients", []):
         nutrient = fn.get("nutrient", {})
+        try:
+            num = int(float(nutrient["number"]))
+        except (ValueError, TypeError):
+            continue
         nutrients.append(UsdaNutrient(
-            number=int(nutrient["number"]),
+            number=num,
             name=nutrient["name"],
             value=float(fn.get("amount", 0)),
             unit=nutrient.get("unitName", ""),
