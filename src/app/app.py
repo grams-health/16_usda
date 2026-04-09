@@ -36,3 +36,25 @@ app.add_url_rule("/usda/nutrient-map/<int:usda_number>", "remove_mapping", handl
 app.add_url_rule("/usda/search", "search", handle_search, methods=["GET"])
 app.add_url_rule("/usda/preview/<int:fdc_id>", "preview", handle_preview, methods=["GET"])
 app.add_url_rule("/usda/import/<int:fdc_id>", "import_food", handle_import, methods=["POST"])
+
+# Testing-only reset endpoint
+if os.environ.get("ENABLE_TESTING_RESET") == "true":
+    def _handle_testing_reset():
+        from sqlalchemy import text
+        for db_module in [import_log_db, nutrient_map_db]:
+            session = db_module.get_session()
+            try:
+                for table in db_module.Base.metadata.sorted_tables:
+                    try:
+                        session.execute(text(f"TRUNCATE TABLE {table.name} RESTART IDENTITY CASCADE"))
+                    except Exception:
+                        session.execute(text(f"DELETE FROM {table.name}"))
+                session.commit()
+            finally:
+                session.close()
+        # Invalidate cached nutrient map
+        from ..core.ref.admin.nutrients import invalidate_cache
+        invalidate_cache()
+        return jsonify({"status": "ok", "message": "All tables truncated"}), 200
+
+    app.add_url_rule("/testing/reset", "testing_reset", _handle_testing_reset, methods=["POST"])
