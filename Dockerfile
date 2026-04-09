@@ -10,6 +10,13 @@ COPY src/ src/
 COPY pytest.ini .
 CMD ["pytest", "src/", "-v", "--tb=short"]
 
+# ---- Contract ----
+FROM base AS contract
+COPY src/ src/
+COPY tests/ tests/
+COPY pytest.ini .
+CMD ["pytest", "tests/contract/", "-v", "--tb=short"]
+
 # ---- Production ----
 FROM base AS production
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
