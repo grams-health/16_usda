@@ -1,0 +1,92 @@
+{
+  "consumer": {
+    "name": "16_usda"
+  },
+  "provider": {
+    "name": "0_admin"
+  },
+  "interactions": [
+    {
+      "description": "a request to list all nutrients",
+      "providerState": "nutrients exist in admin",
+      "request": {
+        "method": "GET",
+        "path": "/nutrients"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+        },
+        "body": [
+          {
+            "nutrient_id": 1,
+            "nutrient_name": "Protein",
+            "category_id": 1
+          }
+        ],
+        "matchingRules": {
+          "$.body": {
+            "min": 1
+          },
+          "$.body[*].*": {
+            "match": "type"
+          },
+          "$.body[*].nutrient_id": {
+            "match": "type"
+          },
+          "$.body[*].nutrient_name": {
+            "match": "type"
+          },
+          "$.body[*].category_id": {
+            "match": "type"
+          }
+        }
+      }
+    },
+    {
+      "description": "a request to create a food with nutrients",
+      "providerState": "admin database is initialized",
+      "request": {
+        "method": "POST",
+        "path": "/foods/with-nutrients",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "food_name": "Chicken Breast",
+          "nutrients": [
+            {
+              "nutrient_id": 1,
+              "quantity": 0.225
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+        },
+        "body": {
+          "status": "success",
+          "message": "Food created with 1 nutrients",
+          "data": {
+            "food_id": 1
+          }
+        },
+        "matchingRules": {
+          "$.body.message": {
+            "match": "type"
+          },
+          "$.body.data.food_id": {
+            "match": "type"
+          }
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "pactSpecification": {
+      "version": "2.0.0"
+    }
+  }
+}

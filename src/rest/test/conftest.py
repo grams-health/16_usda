@@ -1,14 +1,14 @@
 import pytest
-from ...core.own.import_log import db as import_log_db
-from ...core.own.nutrient_map import db as nutrient_map_db
-from ...app.app import app
+from src.core.database import init_db, reset, Base, get_engine
+from src.app.app import app
 
 
 @pytest.fixture(autouse=True)
-def setup_dbs():
-    import_log_db.init_db("sqlite:///:memory:")
-    nutrient_map_db.init_db("sqlite:///:memory:")
+def setup_test_db():
+    init_db("sqlite:///:memory:")
+    Base.metadata.create_all(get_engine())
     yield
+    reset()
 
 
 @pytest.fixture

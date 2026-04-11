@@ -9,12 +9,15 @@ def health():
     return jsonify({"status": "healthy"}), 200
 
 
-# Initialize databases
-from ..core.own.import_log import db as import_log_db
-import_log_db.init_db(os.environ.get("DATABASE_URL", "sqlite:///usda.db"))
+# Initialize shared database
+from ..core.database import init_db, Base, get_engine
 
-from ..core.own.nutrient_map import db as nutrient_map_db
-nutrient_map_db.init_db(os.environ.get("DATABASE_URL", "sqlite:///usda.db"))
+_DB_URL = os.environ.get("DATABASE_URL", "sqlite:///usda_integration.db")
+init_db(_DB_URL)
+
+# Import all model modules to register them on the shared Base
+from ..core.own.import_log import db as import_log_db  # noqa: F401
+from ..core.own.nutrient_map import db as nutrient_map_db  # noqa: F401
 
 # Import route handlers
 from ..rest.nutrient_map.create import handle_create_mapping
@@ -41,17 +44,14 @@ app.add_url_rule("/usda/import/<int:fdc_id>", "import_food", handle_import, meth
 if os.environ.get("ENABLE_TESTING_RESET") == "true":
     def _handle_testing_reset():
         from sqlalchemy import text
-        for db_module in [import_log_db, nutrient_map_db]:
-            session = db_module.get_session()
-            try:
-                for table in db_module.Base.metadata.sorted_tables:
-                    try:
-                        session.execute(text(f"TRUNCATE TABLE {table.name} RESTART IDENTITY CASCADE"))
-                    except Exception:
-                        session.execute(text(f"DELETE FROM {table.name}"))
-                session.commit()
-            finally:
-                session.close()
+        engine = get_engine()
+        with engine.connect() as conn:
+            for table in reversed(Base.metadata.sorted_tables):
+                try:
+                    conn.execute(text(f"TRUNCATE TABLE {table.name} RESTART IDENTITY CASCADE"))
+                except Exception:
+                    conn.execute(text(f"DELETE FROM {table.name}"))
+            conn.commit()
         # Invalidate cached nutrient map
         from ..core.ref.admin.nutrients import invalidate_cache
         invalidate_cache()

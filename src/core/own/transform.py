@@ -32,7 +32,7 @@ def transform_food(detail: UsdaFoodDetail, nutrient_map: dict) -> TransformedFoo
     if 205 in usda_values and 205 in nutrient_map:
         carb_value = usda_values[205]
         fiber_value = usda_values.get(291, 0.0)
-        net_carbs = carb_value - fiber_value
+        net_carbs = max(0.0, carb_value - fiber_value)
         transformed.append(TransformedNutrient(
             nutrient_id=nutrient_map[205],
             quantity=net_carbs / 100,
