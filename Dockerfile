@@ -7,6 +7,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # ---- Test ----
 FROM base AS test
 COPY src/ src/
+COPY alembic/ alembic/
+COPY alembic.ini .
 COPY pytest.ini .
 CMD ["pytest", "src/", "-v", "--tb=short"]
 
@@ -21,6 +23,8 @@ CMD ["pytest", "tests/contract/", "-v", "--tb=short"]
 FROM base AS production
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 COPY --chown=appuser:appgroup src/ src/
+COPY --chown=appuser:appgroup alembic/ alembic/
+COPY --chown=appuser:appgroup alembic.ini .
 COPY --chown=appuser:appgroup docker_entrypoint.py .
 COPY --chown=appuser:appgroup gunicorn.conf.py .
 USER appuser
