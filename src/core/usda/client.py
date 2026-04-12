@@ -34,7 +34,7 @@ def search_foods(query: str, page_size: int = 25) -> list:
     params = {
         "api_key": api_key,
         "query": query,
-        "dataType": "Foundation",
+        "dataType": "Foundation,SR Legacy",
         "pageSize": page_size,
     }
 
@@ -50,8 +50,6 @@ def search_foods(query: str, page_size: int = 25) -> list:
 
     results = []
     for food in foods:
-        if food.get("dataType") != "Foundation":
-            continue
         nutrients = []
         for fn in food.get("foodNutrients", []):
             try:
@@ -70,6 +68,9 @@ def search_foods(query: str, page_size: int = 25) -> list:
             food_category=food.get("foodCategory", ""),
             nutrients=nutrients,
         ))
+
+    # Sort by nutrient count descending — most complete entries first
+    results.sort(key=lambda r: len(r.nutrients), reverse=True)
 
     return results
 

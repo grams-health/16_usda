@@ -98,12 +98,12 @@ class TestSearchFoods:
             get_food(999999)
 
     @patch("src.core.usda.client.requests.get")
-    def test_search_filters_foundation_only(self, mock_get):
+    def test_search_includes_all_data_types(self, mock_get):
         fixture = _load_fixture("search_chicken.json")
-        # Add a non-Foundation food
+        # Add an SR Legacy food
         fixture["foods"].append({
             "fdcId": 999999,
-            "description": "Non-foundation food",
+            "description": "SR Legacy food",
             "dataType": "SR Legacy",
             "foodCategory": "Other",
             "foodNutrients": [],
@@ -114,5 +114,28 @@ class TestSearchFoods:
         mock_get.return_value = mock_resp
 
         results = search_foods("chicken")
-        assert len(results) == 3  # Only Foundation foods
-        assert all(r.fdc_id != 999999 for r in results)
+        assert len(results) == 4  # Foundation + SR Legacy
+        assert any(r.fdc_id == 999999 for r in results)
+
+    @patch("src.core.usda.client.requests.get")
+    def test_search_sorted_by_nutrient_count_desc(self, mock_get):
+        fixture = {
+            "foods": [
+                {"fdcId": 1, "description": "Few nutrients", "dataType": "Foundation", "foodCategory": "", "foodNutrients": [
+                    {"nutrientNumber": "203", "nutrientName": "Protein", "value": 20, "unitName": "g"},
+                ]},
+                {"fdcId": 2, "description": "Many nutrients", "dataType": "SR Legacy", "foodCategory": "", "foodNutrients": [
+                    {"nutrientNumber": "203", "nutrientName": "Protein", "value": 20, "unitName": "g"},
+                    {"nutrientNumber": "204", "nutrientName": "Fat", "value": 5, "unitName": "g"},
+                    {"nutrientNumber": "205", "nutrientName": "Carbs", "value": 0, "unitName": "g"},
+                ]},
+            ]
+        }
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = fixture
+        mock_get.return_value = mock_resp
+
+        results = search_foods("test")
+        assert results[0].fdc_id == 2  # Most nutrients first
+        assert results[1].fdc_id == 1
