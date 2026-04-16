@@ -49,6 +49,16 @@ def transform_food(detail: UsdaFoodDetail, nutrient_map: dict) -> TransformedFoo
             quantity=n.value / 100,
         ))
 
+    # Aggregate entries that share the same nutrient_id (e.g. Methionine +
+    # Cystine both map to "Methionine + Cysteine" in admin).  Sum quantities.
+    aggregated: dict[int, float] = {}
+    for n in transformed:
+        aggregated[n.nutrient_id] = aggregated.get(n.nutrient_id, 0.0) + n.quantity
+    transformed = [
+        TransformedNutrient(nutrient_id=nid, quantity=qty)
+        for nid, qty in aggregated.items()
+    ]
+
     return TransformedFood(
         food_name=detail.description,
         nutrients=transformed,

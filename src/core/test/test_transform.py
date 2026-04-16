@@ -17,12 +17,17 @@ def _make_detail(nutrients_data):
 
 
 def _make_nutrient_map():
-    """Standard nutrient_map: {usda_number: admin_nutrient_id}."""
+    """Standard nutrient_map: {usda_number: admin_nutrient_id}.
+
+    Paired amino acids map to the same admin nutrient_id (production config):
+      Met #506 + Cys #507  → id 10 ("Methionine + Cysteine")
+      Phe #508 + Tyr #509  → id 11 ("Phenylalanine + Tyrosine")
+    """
     return {
         203: 1, 204: 2, 205: 3, 208: 4, 209: 6, 269: 7, 291: 5,
         606: 8, 645: 9, 646: 10, 605: 11, 619: 12, 618: 13, 601: 14,
-        512: 15, 503: 16, 504: 17, 505: 18, 506: 19, 507: 20,
-        508: 21, 509: 22, 502: 23, 501: 24, 510: 25,
+        512: 15, 503: 16, 504: 17, 505: 18, 506: 19, 507: 19,
+        508: 21, 509: 21, 502: 23, 501: 24, 510: 25,
         303: 26, 301: 27, 304: 28, 309: 29,
         306: 30, 307: 31, 328: 32, 418: 33, 417: 34,
     }
@@ -85,25 +90,37 @@ class TestTransform:
         result = transform_food(detail, nmap)
         assert len(result.nutrients) == 1
 
-    def test_methionine_cystine_individual(self):
+    def test_methionine_cystine_summed(self):
+        """Met + Cys map to the same admin nutrient; quantities must be summed."""
         detail = _make_detail([
             (506, "Methionine", 0.60, "G"),
             (507, "Cystine", 0.24, "G"),
         ])
-        nmap = {506: 19, 507: 20}
+        nmap = {506: 10, 507: 10}  # same admin nutrient_id
         result = transform_food(detail, nmap)
-        assert len(result.nutrients) == 2
-        met = [n for n in result.nutrients if n.nutrient_id == 19][0]
-        cys = [n for n in result.nutrients if n.nutrient_id == 20][0]
-        assert met.quantity == pytest.approx(0.006)
-        assert cys.quantity == pytest.approx(0.0024)
+        assert len(result.nutrients) == 1
+        assert result.nutrients[0].nutrient_id == 10
+        assert result.nutrients[0].quantity == pytest.approx(0.0084)  # (0.60+0.24)/100
 
-    def test_phenylalanine_tyrosine_individual(self):
+    def test_phenylalanine_tyrosine_summed(self):
+        """Phe + Tyr map to the same admin nutrient; quantities must be summed."""
         detail = _make_detail([
             (508, "Phenylalanine", 0.88, "G"),
             (509, "Tyrosine", 0.75, "G"),
         ])
-        nmap = {508: 21, 509: 22}
+        nmap = {508: 11, 509: 11}  # same admin nutrient_id
+        result = transform_food(detail, nmap)
+        assert len(result.nutrients) == 1
+        assert result.nutrients[0].nutrient_id == 11
+        assert result.nutrients[0].quantity == pytest.approx(0.0163)  # (0.88+0.75)/100
+
+    def test_paired_amino_acids_with_separate_ids(self):
+        """When mapped to different IDs (hypothetical), keep separate."""
+        detail = _make_detail([
+            (506, "Methionine", 0.60, "G"),
+            (507, "Cystine", 0.24, "G"),
+        ])
+        nmap = {506: 19, 507: 20}  # different admin nutrient_ids
         result = transform_food(detail, nmap)
         assert len(result.nutrients) == 2
 
