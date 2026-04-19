@@ -30,16 +30,14 @@ ADDITIONS = [
 
 
 def upgrade() -> None:
-    nutrient_map = sa.table(
-        "nutrient_map",
-        sa.column("usda_number", sa.Integer),
-        sa.column("usda_name", sa.String),
-        sa.column("nutrient_name", sa.String),
-    )
-    op.bulk_insert(nutrient_map, [
-        {"usda_number": num, "usda_name": name, "nutrient_name": mapped}
-        for num, name, mapped in ADDITIONS
-    ])
+    # Idempotent upserts — some environments added 507/509 via the old
+    # platform seed path before this migration existed.
+    for num, name, mapped in ADDITIONS:
+        op.execute(
+            f"INSERT INTO nutrient_map (usda_number, usda_name, nutrient_name) "
+            f"VALUES ({num}, '{name}', '{mapped}') "
+            f"ON CONFLICT (usda_number) DO NOTHING"
+        )
     # Correct the usda_name for 269 to match the modern USDA spelling.
     op.execute(
         "UPDATE nutrient_map SET usda_name = 'Sugars, total including NLEA' "
