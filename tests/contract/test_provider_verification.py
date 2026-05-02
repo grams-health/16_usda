@@ -1,10 +1,10 @@
 """Pact provider verification: 16_usda honours every consumer contract
 registered against it in the local broker.
 
-Phase 1 of provider-side adoption: ship the harness with
-`enable_pending=True` so unmapped provider states surface as PENDING
-rather than failing the build. State handlers can be added
-incrementally in `provider_states.py`.
+Strict mode: `enable_pending=False`. Every `given:` clause referenced
+by a consumer pact must have a corresponding handler registered in
+`provider_states.py`. Unmapped states return 500 from the setup
+endpoint and the verifier fails — PENDING is no longer tolerated.
 
 This test runs LOCALLY ONLY — there is no CI integration. Run via the
 contract Dockerfile stage:
@@ -69,7 +69,7 @@ def test_usda_provider_honors_contracts(provider_app):
     output, logs = verifier.verify_with_broker(
         broker_url=BROKER_URL,
         provider_states_setup_url=f"{provider_app}/_pact/provider-states",
-        enable_pending=True,
+        enable_pending=False,
         publish_version="local",
         publish_verification_results=False,
     )

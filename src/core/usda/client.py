@@ -67,6 +67,7 @@ def search_foods(query: str, page_size: int = 25) -> list:
             description=food["description"],
             food_category=food.get("foodCategory", ""),
             nutrients=nutrients,
+            data_type=food.get("dataType", ""),
         ))
 
     # Sort by nutrient count descending — most complete entries first

@@ -7,11 +7,12 @@ class UsdaNutrient:
 
 
 class UsdaSearchResult:
-    def __init__(self, fdc_id: int, description: str, food_category: str, nutrients: list):
+    def __init__(self, fdc_id: int, description: str, food_category: str, nutrients: list, data_type: str = ""):
         self.fdc_id = fdc_id
         self.description = description
         self.food_category = food_category
         self.nutrients = nutrients
+        self.data_type = data_type
 
 
 class UsdaFoodDetail:

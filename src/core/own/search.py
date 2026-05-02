@@ -11,6 +11,7 @@ def search_usda_foods(query: str) -> list:
         {
             "fdc_id": r.fdc_id,
             "description": r.description,
+            "data_type": r.data_type,
             "food_category": r.food_category,
             "imported": r.fdc_id in imported_ids,
         }
