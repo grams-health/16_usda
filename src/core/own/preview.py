@@ -4,7 +4,16 @@ from .transform import USDA_TO_NUTRIENT_NAME
 
 
 def preview_usda_food(fdc_id: int) -> dict:
-    """Fetch USDA food detail and map to admin nutrients with coverage info."""
+    """Fetch USDA food detail and map to admin nutrients with coverage info.
+
+    The `nutrients` array contains only nutrients that are both present in
+    the USDA detail AND mappable via the nutrient_map — every entry has a
+    real `nutrient_id` and a numeric `quantity`. Unmappable / absent
+    nutrients are reported in `coverage.missing` rather than as null
+    placeholders inside `nutrients`, so the response satisfies the
+    consumer-driven Pact (which forbids null `quantity` and demands
+    integer `nutrient_id`).
+    """
     detail = get_food(fdc_id)
     nutrient_map = get_nutrient_map()
 
@@ -24,11 +33,11 @@ def preview_usda_food(fdc_id: int) -> dict:
             unit = usda_units[usda_number]
 
             entry = {
+                "nutrient_id": nutrient_map[usda_number],
                 "nutrient_name": nutrient_name,
                 "quantity": value / 100,
                 "unit": unit,
                 "usda_number": usda_number,
-                "available": True,
             }
 
             # Special note for carbohydrates
@@ -39,16 +48,7 @@ def preview_usda_food(fdc_id: int) -> dict:
 
             nutrients.append(entry)
         else:
-            nutrients.append({
-                "nutrient_name": nutrient_name,
-                "quantity": None,
-                "unit": usda_units.get(usda_number, ""),
-                "usda_number": usda_number,
-                "available": False,
-            })
             missing.append(nutrient_name)
-
-    available_count = len([n for n in nutrients if n["available"]])
 
     return {
         "fdc_id": detail.fdc_id,
@@ -56,7 +56,7 @@ def preview_usda_food(fdc_id: int) -> dict:
         "food_category": detail.food_category,
         "nutrients": nutrients,
         "coverage": {
-            "available": available_count,
+            "available": len(nutrients),
             "total": len(USDA_TO_NUTRIENT_NAME),
             "missing": missing,
         },

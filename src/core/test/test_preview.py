@@ -82,7 +82,7 @@ class TestPreview:
 
         result = preview_usda_food(171077)
         protein = [n for n in result["nutrients"] if n["usda_number"] == 203][0]
-        assert protein["available"] is True
+        assert protein["nutrient_id"] == 1
         assert protein["quantity"] == pytest.approx(0.225)
 
     @patch("src.core.own.preview.get_nutrient_map")
@@ -93,6 +93,7 @@ class TestPreview:
         mock_nmap.return_value = {203: 1}
 
         result = preview_usda_food(171077)
-        available = [n for n in result["nutrients"] if n["available"]]
-        assert len(available) == 1
+        # Only mappable + present nutrients appear in `nutrients[]`.
+        assert len(result["nutrients"]) == 1
+        assert result["nutrients"][0]["nutrient_id"] == 1
         assert result["coverage"]["available"] == 1

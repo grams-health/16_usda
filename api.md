@@ -125,12 +125,14 @@ Search USDA FoodData Central Foundation Foods by keyword. Results are annotated 
     {
       "fdc_id": 171077,
       "description": "Chicken, broilers or fryers, breast, skinless, boneless, meat only, raw",
+      "data_type": "Foundation",
       "food_category": "Poultry Products",
       "imported": false
     },
     {
       "fdc_id": 171078,
       "description": "Chicken, broilers or fryers, thigh, meat only, raw",
+      "data_type": "Foundation",
       "food_category": "Poultry Products",
       "imported": true
     }
@@ -158,10 +160,9 @@ Fetch a single USDA food's full nutrient data and map it to admin nutrients. Sho
   "food_name": "Chicken, broilers or fryers, breast, skinless, boneless, meat only, raw",
   "food_category": "Poultry Products",
   "nutrients": [
-    { "nutrient_name": "Protein", "quantity": 0.2250, "unit": "g", "usda_number": 203, "available": true },
-    { "nutrient_name": "Fat", "quantity": 0.0262, "unit": "g", "usda_number": 204, "available": true },
-    { "nutrient_name": "Carbohydrates", "quantity": 0.0000, "unit": "g", "usda_number": 205, "available": true, "note": "computed: #205 - #291" },
-    { "nutrient_name": "Vitamin D", "quantity": null, "unit": "ug", "usda_number": 328, "available": false }
+    { "nutrient_id": 1, "nutrient_name": "Protein", "quantity": 0.2250, "unit": "g", "usda_number": 203 },
+    { "nutrient_id": 2, "nutrient_name": "Fat", "quantity": 0.0262, "unit": "g", "usda_number": 204 },
+    { "nutrient_id": 3, "nutrient_name": "Carbohydrates", "quantity": 0.0000, "unit": "g", "usda_number": 205, "note": "computed: #205 - #291" }
   ],
   "coverage": {
     "available": 28,
@@ -170,6 +171,8 @@ Fetch a single USDA food's full nutrient data and map it to admin nutrients. Sho
   }
 }
 ```
+
+`nutrients[]` only includes mappable, non-null entries — every element carries an integer `nutrient_id` and a numeric `quantity`. Nutrients absent from the USDA payload (or the nutrient_map) are listed by name in `coverage.missing`.
 
 Calls USDA FoodData Central `GET /fdc/v1/food/{fdcId}`. Reads nutrient_map from DB, fetches admin nutrients for name→ID resolution, and maps USDA data to admin nutrient names. Quantities converted from per-100g to per-gram. Carbohydrates computed as USDA #205 minus #291.
 

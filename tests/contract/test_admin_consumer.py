@@ -17,10 +17,12 @@ MOCK_ADMIN_URL = "http://localhost:9882"
 
 
 def _setup_nutrient_map_db():
-    """Initialize an in-memory SQLite nutrient_map DB with a test mapping."""
-    from src.core.own.nutrient_map.db import init_db, get_session, NutrientMapRow
+    """Initialize an in-memory SQLite DB with a test nutrient mapping."""
+    from src.core.database import init_db, Base, get_engine, get_session
+    from src.core.own.nutrient_map.db import NutrientMapRow
 
     init_db("sqlite:///:memory:")
+    Base.metadata.create_all(get_engine())
     session = get_session()
     try:
         session.add(NutrientMapRow(
