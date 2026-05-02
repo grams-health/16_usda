@@ -72,6 +72,7 @@ def test_usda_provider_honors_contracts(provider_app):
         enable_pending=False,
         publish_version="local",
         publish_verification_results=False,
+        consumer_version_selectors=[{"latest": True}],
     )
 
     assert output == 0, f"Provider verification failed:\n{logs}"
