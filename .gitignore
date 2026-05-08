@@ -1,1 +1,5 @@
 __pycache__/
+
+# Pact + build artifacts (auto-cleanup)
+pacts/
+*.log
