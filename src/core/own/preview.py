@@ -24,8 +24,8 @@ def preview_usda_food(fdc_id: int) -> dict:
         usda_values[n.number] = n.value
         usda_units[n.number] = n.unit
 
-    nutrients = []
-    missing = []
+    raw_entries: list[dict] = []
+    missing: list[str] = []
 
     for usda_number, nutrient_name in USDA_TO_NUTRIENT_NAME.items():
         if usda_number in usda_values and usda_number in nutrient_map:
@@ -46,9 +46,28 @@ def preview_usda_food(fdc_id: int) -> dict:
                 entry["quantity"] = (value - fiber_value) / 100
                 entry["note"] = "computed: #205 - #291"
 
-            nutrients.append(entry)
+            raw_entries.append(entry)
         else:
             missing.append(nutrient_name)
+
+    # Aggregate entries that share the same admin nutrient_id (the
+    # FAO/WHO bundled-pair convention: USDA Met + Cys both map to admin
+    # id 10 "Methionine + Cysteine"; USDA Phe + Tyr both map to admin
+    # id 11 "Phenylalanine + Tyrosine"). Sum quantities so consumers see
+    # exactly what import will write — one row per admin nutrient_id.
+    # Mirrors the aggregation in transform.py used by /usda/import/<id>.
+    nutrients: list[dict] = []
+    by_id: dict[int, dict] = {}
+    for entry in raw_entries:
+        nid = entry["nutrient_id"]
+        if nid in by_id:
+            existing = by_id[nid]
+            existing["quantity"] += entry["quantity"]
+            existing.setdefault("summed_from", [existing["nutrient_name"]])
+            existing["summed_from"].append(entry["nutrient_name"])
+        else:
+            by_id[nid] = dict(entry)
+            nutrients.append(by_id[nid])
 
     return {
         "fdc_id": detail.fdc_id,
