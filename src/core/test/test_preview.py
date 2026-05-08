@@ -97,3 +97,43 @@ class TestPreview:
         assert len(result["nutrients"]) == 1
         assert result["nutrients"][0]["nutrient_id"] == 1
         assert result["coverage"]["available"] == 1
+
+    @patch("src.core.own.preview.get_nutrient_map")
+    @patch("src.core.own.preview.get_food")
+    def test_preview_aggregates_bundled_amino_pairs(self, mock_get_food, mock_nmap):
+        """When USDA Met (#506) and Cys (#507) both map to the same admin
+        nutrient_id (id 10 = "Methionine + Cysteine"), the preview must
+        return a single aggregated entry whose quantity is the sum, not
+        two separate rows. Same for Phe (#508) + Tyr (#509) -> id 11.
+        Mirrors the FAO/WHO-style bundled-pair convention enforced in
+        transform.py for the import path.
+        """
+        mock_get_food.return_value = _make_food_detail()
+        # Bundled mapping: Met+Cys both -> 10, Phe+Tyr both -> 11
+        bundled_map = {
+            203: 1, 204: 2, 205: 3, 208: 4, 209: 6, 269: 7, 291: 5,
+            512: 6, 503: 7, 504: 8, 505: 9,
+            506: 10, 507: 10,  # Methionine + Cystine -> id 10
+            508: 11, 509: 11,  # Phenylalanine + Tyrosine -> id 11
+            502: 12, 501: 13, 510: 14,
+        }
+        mock_nmap.return_value = bundled_map
+
+        result = preview_usda_food(171077)
+        nuts = {n["nutrient_id"]: n for n in result["nutrients"]}
+
+        # Each bundled id appears exactly once
+        amino_ids = [n["nutrient_id"] for n in result["nutrients"]]
+        assert amino_ids.count(10) == 1
+        assert amino_ids.count(11) == 1
+
+        # Fixture food_171077.json has Met=0.60, Cys=0.24 per 100g.
+        # Sum / 100 = 0.0084.
+        assert nuts[10]["quantity"] == pytest.approx(0.0084, rel=1e-3)
+        # Fixture has Phe=0.88, Tyr=0.75 per 100g. Sum / 100 = 0.0163.
+        assert nuts[11]["quantity"] == pytest.approx(0.0163, rel=1e-3)
+
+        # The summed_from field carries both amino names for transparency.
+        assert "summed_from" in nuts[10]
+        assert set(nuts[10]["summed_from"]) == {"Methionine", "Cystine"}
+        assert set(nuts[11]["summed_from"]) == {"Phenylalanine", "Tyrosine"}
