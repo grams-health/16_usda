@@ -41,13 +41,30 @@ class TestImportFood:
         mock_create.assert_called_once()
         mock_record.assert_called_once()
 
+    @patch("src.core.own.import_food.record_import")
+    @patch("src.core.own.import_food.create_food_with_nutrients")
+    @patch("src.core.own.import_food.get_nutrient_map")
+    @patch("src.core.own.import_food.get_food")
     @patch("src.core.own.import_food.is_imported")
-    def test_import_already_imported(self, mock_imported):
-        mock_imported.return_value = True
+    def test_import_already_in_admin_returns_duplicate(self, mock_imported, mock_get_food, mock_nmap, mock_create, mock_record):
+        """Admin 409 (food name already exists) is translated by the
+        AdminFoodConflictError anti-corruption boundary into a domain
+        Status("error", error="duplicate"), which the REST handler maps
+        to a 409 response. Replaces the legacy is_imported-short-circuit
+        behaviour: admin is now the source of truth for duplicates so a
+        stale local import_log row can't block a fresh re-import."""
+        from ..ref.admin.create_food import AdminFoodConflictError
+        mock_imported.return_value = False  # local log empty / irrelevant
+        mock_get_food.return_value = _make_food_detail()
+        mock_nmap.return_value = _make_nutrient_map()
+        mock_create.side_effect = AdminFoodConflictError("Chicken breast")
+
         result = import_usda_food(171077)
         assert not result
         assert result.status == "error"
-        assert "already imported" in result.message
+        assert result.error == "duplicate"
+        # record_import must NOT fire — nothing new was imported.
+        mock_record.assert_not_called()
 
     @patch("src.core.own.import_food.get_food")
     @patch("src.core.own.import_food.is_imported")
