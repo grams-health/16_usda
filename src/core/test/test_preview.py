@@ -84,6 +84,12 @@ class TestPreview:
         protein = [n for n in result["nutrients"] if n["usda_number"] == 203][0]
         assert protein["nutrient_id"] == 1
         assert protein["quantity"] == pytest.approx(0.225)
+        # Every entry in `nutrients[]` is by construction mapped + present
+        # in the USDA detail — `available` must reflect that. Consumers
+        # rely on this per-entry boolean (issue #6).
+        assert protein["available"] is True
+        for entry in result["nutrients"]:
+            assert entry["available"] is True
 
     @patch("src.core.own.preview.get_nutrient_map")
     @patch("src.core.own.preview.get_food")

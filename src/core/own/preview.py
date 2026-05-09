@@ -38,6 +38,12 @@ def preview_usda_food(fdc_id: int) -> dict:
                 "quantity": value / 100,
                 "unit": unit,
                 "usda_number": usda_number,
+                # Mapped + present in USDA detail. Always True for entries
+                # that land in `nutrients[]`; absent / unmappable nutrients
+                # are reported in `coverage.missing` and never appear here.
+                # Exposing this as a per-entry boolean lets consumers
+                # filter without re-deriving from coverage info.
+                "available": True,
             }
 
             # Special note for carbohydrates

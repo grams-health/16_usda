@@ -106,3 +106,45 @@ class TestCreateFoodWithNutrients(unittest.TestCase):
         self.assertEqual(result["status"], "success")
         self.assertIn("data", result)
         self.assertIn("food_id", result["data"])
+
+    def test_create_food_with_nutrients_duplicate_returns_conflict(self):
+        """Admin returns 409 when food_name already exists; consumer
+        translates this into AdminFoodConflictError so the REST handler
+        can map duplicate-import to a 409 response instead of a 5xx."""
+        from src.core.ref.admin.create_food import (
+            create_food_with_nutrients,
+            AdminFoodConflictError,
+        )
+
+        (
+            pact.given("a food named 'Chicken Breast' already exists in admin")
+            .upon_receiving("a request to create a food with a duplicate name")
+            .with_request(
+                method="POST",
+                path="/foods/with-nutrients",
+                headers={"Content-Type": "application/json"},
+                body={
+                    "food_name": "Chicken Breast",
+                    "nutrients": [
+                        {"nutrient_id": 1, "quantity": 0.225},
+                    ],
+                },
+            )
+            .will_respond_with(
+                status=409,
+                body={
+                    "status": "error",
+                    "message": Like("Food 'Chicken Breast' already exists"),
+                },
+            )
+        )
+
+        with pact:
+            with patch.dict(os.environ, {"ADMIN_SERVICE_URL": MOCK_ADMIN_URL}):
+                with self.assertRaises(AdminFoodConflictError) as ctx:
+                    create_food_with_nutrients(
+                        food_name="Chicken Breast",
+                        nutrients=[{"nutrient_id": 1, "quantity": 0.225}],
+                    )
+
+        self.assertEqual(ctx.exception.food_name, "Chicken Breast")
