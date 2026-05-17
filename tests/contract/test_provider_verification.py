@@ -35,7 +35,7 @@ def provider_app():
     app.register_blueprint(provider_states)
 
     server = threading.Thread(
-        target=lambda: app.run(host="127.0.0.1", port=PROVIDER_PORT, use_reloader=False),
+        target=lambda: app.run(host="localhost", port=PROVIDER_PORT, use_reloader=False),
         daemon=True,
     )
     server.start()
@@ -64,15 +64,11 @@ def _broker_reachable():
 @pytest.mark.skipif(not _broker_reachable(), reason=f"Pact broker not reachable at {BROKER_URL}")
 def test_usda_provider_honors_contracts(provider_app):
     """Verify 16_usda satisfies every consumer contract from the broker."""
-    verifier = Verifier(provider="16_usda", provider_base_url=provider_app)
-
-    output, logs = verifier.verify_with_broker(
-        broker_url=BROKER_URL,
-        provider_states_setup_url=f"{provider_app}/_pact/provider-states",
-        enable_pending=False,
-        publish_version="local",
-        publish_verification_results=False,
-        consumer_version_selectors=[{"latest": True}],
+    verifier = (
+        Verifier("16_usda")
+        .add_transport(url=provider_app)
+        .broker_source(BROKER_URL)
+        .state_handler(f"{provider_app}/_pact/provider-states", body=True)
     )
-
-    assert output == 0, f"Provider verification failed:\n{logs}"
+    # v3: verify() raises on failure, returns normally on success.
+    verifier.verify()

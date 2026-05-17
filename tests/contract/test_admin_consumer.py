@@ -1,19 +1,14 @@
-import atexit
 import os
-import unittest
+import pytest
 from unittest.mock import patch
+from pact import Pact, match
 
-from pact import Consumer, Provider, Like, EachLike
 
-pact = Consumer("16_usda").has_pact_with(
-    Provider("0_admin"),
-    port=9882,
-    pact_dir="pacts",
-)
-pact.start_service()
-atexit.register(pact.stop_service)
-
-MOCK_ADMIN_URL = "http://localhost:9882"
+@pytest.fixture
+def pact():
+    p = Pact("16_usda", "0_admin").with_specification("V4")
+    yield p
+    p.write_file("pacts")
 
 
 def _setup_nutrient_map_db():
@@ -35,79 +30,72 @@ def _setup_nutrient_map_db():
         session.close()
 
 
-class TestGetNutrientMap(unittest.TestCase):
+class TestGetNutrientMap:
 
-    def test_get_nutrient_map(self):
+    def test_get_nutrient_map(self, pact):
         (
-            pact.given("nutrients exist in admin")
+            pact
             .upon_receiving("a request to list all nutrients")
-            .with_request(method="GET", path="/nutrients")
-            .will_respond_with(
-                status=200,
-                body=EachLike({
-                    "nutrient_id": Like(1),
-                    "nutrient_name": Like("Protein"),
-                    "category_id": Like(1),
-                }),
-            )
+            .given("nutrients exist in admin")
+            .with_request("GET", "/nutrients")
+            .will_respond_with(200)
+            .with_body(match.each_like({
+                "nutrient_id": match.int(1),
+                "nutrient_name": match.str("Protein"),
+                "category_id": match.int(1),
+            }), content_type="application/json")
         )
 
-        with pact:
+        with pact.serve() as srv:
             _setup_nutrient_map_db()
             from src.core.ref.admin.nutrients import invalidate_cache
             invalidate_cache()
 
-            with patch.dict(os.environ, {"ADMIN_SERVICE_URL": MOCK_ADMIN_URL}):
+            with patch.dict(os.environ, {"ADMIN_SERVICE_URL": str(srv.url).rstrip("/")}):
                 from src.core.ref.admin.nutrients import get_nutrient_map
-
                 result = get_nutrient_map()
 
-        self.assertIsInstance(result, dict)
-        self.assertIn(203, result)
-        self.assertEqual(result[203], 1)
+        assert isinstance(result, dict)
+        assert 203 in result
+        assert result[203] == 1
 
 
-class TestCreateFoodWithNutrients(unittest.TestCase):
+class TestCreateFoodWithNutrients:
 
-    def test_create_food_with_nutrients(self):
+    def test_create_food_with_nutrients(self, pact):
         (
-            pact.given("admin database is initialized")
+            pact
             .upon_receiving("a request to create a food with nutrients")
-            .with_request(
-                method="POST",
-                path="/foods/with-nutrients",
-                headers={"Content-Type": "application/json"},
-                body={
-                    "food_name": "Chicken Breast",
-                    "nutrients": [
-                        {"nutrient_id": 1, "quantity": 0.225},
-                    ],
-                },
-            )
-            .will_respond_with(
-                status=201,
-                body={
-                    "status": "success",
-                    "message": Like("Food created with 1 nutrients"),
-                    "data": {"food_id": Like(1)},
-                },
-            )
+            .given("admin database is initialized")
+            .with_request("POST", "/foods/with-nutrients")
+            .with_header("Content-Type", "application/json")
+            .with_body({
+                "food_name": "Chicken Breast",
+                "nutrients": [
+                    {"nutrient_id": 1, "quantity": 0.225},
+                ],
+            }, content_type="application/json")
+            .will_respond_with(201)
+            .with_body({
+                "status": "success",
+                "message": match.str("Food created with 1 nutrients"),
+                "data": {"food_id": match.int(1)},
+            }, content_type="application/json")
         )
 
-        with pact:
-            with patch.dict(os.environ, {"ADMIN_SERVICE_URL": MOCK_ADMIN_URL}):
+        with pact.serve() as srv:
+            with patch.dict(os.environ, {"ADMIN_SERVICE_URL": str(srv.url).rstrip("/")}):
                 from src.core.ref.admin.create_food import create_food_with_nutrients
-
                 result = create_food_with_nutrients(
                     food_name="Chicken Breast",
                     nutrients=[{"nutrient_id": 1, "quantity": 0.225}],
                 )
 
-        self.assertEqual(result["status"], "success")
-        self.assertIn("data", result)
-        self.assertIn("food_id", result["data"])
+        assert result["status"] == "success"
+        assert "data" in result
+        assert "food_id" in result["data"]
 
-    def test_create_food_with_nutrients_duplicate_returns_conflict(self):
+    def test_create_food_with_nutrients_duplicate_returns_conflict(self, pact):
         """Admin returns 409 when food_name already exists; consumer
         translates this into AdminFoodConflictError so the REST handler
         can map duplicate-import to a 409 response instead of a 5xx."""
@@ -117,34 +105,30 @@ class TestCreateFoodWithNutrients(unittest.TestCase):
         )
 
         (
-            pact.given("a food named 'Chicken Breast' already exists in admin")
+            pact
             .upon_receiving("a request to create a food with a duplicate name")
-            .with_request(
-                method="POST",
-                path="/foods/with-nutrients",
-                headers={"Content-Type": "application/json"},
-                body={
-                    "food_name": "Chicken Breast",
-                    "nutrients": [
-                        {"nutrient_id": 1, "quantity": 0.225},
-                    ],
-                },
-            )
-            .will_respond_with(
-                status=409,
-                body={
-                    "status": "error",
-                    "message": Like("Food 'Chicken Breast' already exists"),
-                },
-            )
+            .given("a food named 'Chicken Breast' already exists in admin")
+            .with_request("POST", "/foods/with-nutrients")
+            .with_header("Content-Type", "application/json")
+            .with_body({
+                "food_name": "Chicken Breast",
+                "nutrients": [
+                    {"nutrient_id": 1, "quantity": 0.225},
+                ],
+            }, content_type="application/json")
+            .will_respond_with(409)
+            .with_body({
+                "status": "error",
+                "message": match.str("Food 'Chicken Breast' already exists"),
+            }, content_type="application/json")
         )
 
-        with pact:
-            with patch.dict(os.environ, {"ADMIN_SERVICE_URL": MOCK_ADMIN_URL}):
-                with self.assertRaises(AdminFoodConflictError) as ctx:
+        with pact.serve() as srv:
+            with patch.dict(os.environ, {"ADMIN_SERVICE_URL": str(srv.url).rstrip("/")}):
+                with pytest.raises(AdminFoodConflictError) as ctx:
                     create_food_with_nutrients(
                         food_name="Chicken Breast",
                         nutrients=[{"nutrient_id": 1, "quantity": 0.225}],
                     )
 
-        self.assertEqual(ctx.exception.food_name, "Chicken Breast")
+        assert ctx.value.food_name == "Chicken Breast"
