@@ -310,7 +310,7 @@ def _record_outcome(
 
 @retry(
     retry=retry_if_exception_type(UsdaTransientError),
-    stop=stop_after_attempt(3),
+    stop=stop_after_attempt(30),
     wait=wait_exponential_jitter(initial=0.5, max=5.0),
     before_sleep=before_sleep_log(log, logging.WARNING),
     reraise=True,
