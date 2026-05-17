@@ -28,14 +28,14 @@ def handle_search():
             )
     except Exception:
         try:
-            logger.exception("Unhandled exception in /usda/search")
+            logger.exception("Unhandled exception in search view")
         except Exception:
             pass
         try:
-            return jsonify({"status": "error", "message": "Internal error in /usda/search"}), 503
+            return jsonify({"status": "error", "message": "Internal server error"}), 503
         except Exception:
             return (
-                '{"status": "error", "message": "Internal error in /usda/search"}',
+                '{"status": "error", "message": "Internal server error"}',
                 503,
                 {"Content-Type": "application/json"},
             )
