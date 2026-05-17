@@ -60,9 +60,12 @@ ADMIN_CREATE_FOOD_RESPONSE: dict = {
 
 class _FakeResponse:
     def __init__(self, json_data, status_code=200):
+        import json as _json_mod
         self._json = json_data
         self.status_code = status_code
         self.headers = {"content-type": "application/json"}
+        self.content = _json_mod.dumps(json_data).encode("utf-8")
+        self.text = self.content.decode("utf-8")
         self.raw = type("FakeRaw", (), {"_connection": None})()
 
     def json(self):
