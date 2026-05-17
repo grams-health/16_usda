@@ -1,6 +1,6 @@
 from flask import request, jsonify
 from ..service.search import search_usda_foods
-from ..core.usda.client import UsdaRateLimitError
+from ..core.usda.client import UsdaApiError, UsdaRateLimitError
 
 
 def handle_search():
@@ -13,3 +13,5 @@ def handle_search():
         return jsonify({"results": results}), 200
     except UsdaRateLimitError:
         return jsonify({"status": "error", "message": "USDA API rate limit exceeded"}), 429
+    except UsdaApiError as e:
+        return jsonify({"status": "error", "message": f"USDA upstream error: {e}"}), 502
