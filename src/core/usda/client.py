@@ -132,10 +132,11 @@ class _IpHealth:
 
     @property
     def is_quarantined(self) -> bool:
-        """Three consecutive transient failures within 5 minutes is the
-        quarantine threshold. On quarantine, the client drains the
-        connection pool so the next request re-resolves DNS and likely
-        picks a different A record."""
+        """Three consecutive transient failures within 5 minutes.
+        Pool drain happens on EVERY transient (not just on quarantine
+        — see `_get_json`), so this flag is now an observability
+        signal for `/health/usda` ("this edge is sustainedly bad"),
+        not a behavioural switch."""
         return (
             self.consecutive_failures >= 3
             and (time.time() - self.last_failure_ts) < 300
@@ -227,11 +228,11 @@ _session: requests.Session = _build_session()
 
 def _drain_pool() -> None:
     """Close all pooled connections so the next request re-resolves
-    DNS. Triggered when an upstream IP is quarantined — the next
-    request statistically lands on a different A record."""
-    global _session
+    DNS. `requests.Session.close()` invalidates the pooled keep-alive
+    connections; the session object itself remains usable — the next
+    request will create a fresh connection (and re-resolve DNS),
+    statistically landing on a different A record under round-robin."""
     _session.close()
-    _session = _build_session()
 
 
 # ---------------------------------------------------------------------------
@@ -256,14 +257,29 @@ def _get_api_key() -> str:
 def _remote_ip_from_response(resp: requests.Response) -> str | None:
     """Extract the IP that actually served this response. urllib3
     keeps it on the underlying connection but doesn't expose it on
-    Response; we reach through `resp.raw._connection.sock.getpeername()`
-    (urllib3 issue #1071). Best-effort: returns None if introspection
-    fails — IP tracking degrades to "unknown" bucket rather than
-    crashing."""
-    try:
-        return resp.raw._connection.sock.getpeername()[0]  # type: ignore[union-attr]
-    except Exception:
+    Response (urllib3 issue #1071); we try several known attribute
+    paths since urllib3's internals shift between versions. Best-effort:
+    returns None if every probe fails — IP tracking degrades to
+    "unknown" bucket rather than crashing the request."""
+    raw = getattr(resp, "raw", None)
+    if raw is None:
         return None
+    # urllib3 2.x: response._connection.sock
+    # urllib3 1.x: response._original_response.fp.raw._sock
+    # Different SSL wrappers expose getpeername differently.
+    for path in (
+        lambda r: r._connection.sock.getpeername()[0],
+        lambda r: r._fp.fp.raw._sock.getpeername()[0],
+        lambda r: r._fp.raw._sock.getpeername()[0],
+        lambda r: r.connection.sock.getpeername()[0],
+    ):
+        try:
+            ip = path(raw)
+            if ip:
+                return ip
+        except (AttributeError, OSError, TypeError):
+            continue
+    return None
 
 
 def _is_json_content(resp: requests.Response) -> bool:
@@ -312,10 +328,13 @@ def _get_json(path: str, params: dict[str, Any]) -> dict[str, Any]:
         resp = _session.get(url, params=full_params, timeout=_TIMEOUT)
     except requests.RequestException as exc:
         # Connect / read / SSL — transient at the transport layer.
+        # Drain the pool so the retry re-resolves DNS rather than
+        # reusing whatever stale connection caused this failure.
         log.warning(
             "usda.transport_error path=%s err=%s",
             path, f"{type(exc).__name__}: {exc}",
         )
+        _drain_pool()
         raise UsdaTransientError(
             f"transport: {type(exc).__name__}: {exc}"
         ) from exc
@@ -347,14 +366,20 @@ def _get_json(path: str, params: dict[str, Any]) -> dict[str, Any]:
     # from USDA's API" (JSON, terminal) from "misrouted-edge 404 with
     # marketing HTML" (HTML, transient).
     if not _is_json_content(resp):
-        _, just_q = _record_outcome(served_by, success=False)
-        if just_q:
-            log.warning(
-                "usda.ip_quarantined ip=%s reason=non_json_content "
-                "draining_pool=true",
-                served_by,
-            )
-            _drain_pool()
+        _record_outcome(served_by, success=False)
+        # CRITICAL: drain the pool on EVERY transient, not just on
+        # quarantine. Without this, urllib3 keeps reusing the existing
+        # keep-alive connection — which is exactly the broken edge that
+        # served the HTML. Closing forces re-resolution of DNS on the
+        # next attempt, giving DNS round-robin a chance to pick the
+        # good edge. With 2 IPs and uniform round-robin, this turns
+        # the per-attempt success probability from ~stuck-on-bad to
+        # ~50%, making 3 retries effectively eliminate the failure mode.
+        log.warning(
+            "usda.transient_drain ip=%s reason=non_json_content",
+            served_by,
+        )
+        _drain_pool()
         raise UsdaTransientError(
             f"non-JSON response from {served_by} "
             f"(status={resp.status_code}, "
@@ -376,13 +401,13 @@ def _get_json(path: str, params: dict[str, Any]) -> dict[str, Any]:
         # urllib3.Retry already retried these; if we got here, all
         # transport retries were exhausted. Treat as transient at the
         # tenacity layer so we attempt one more round with a fresh
-        # connection.
-        _, just_q = _record_outcome(served_by, success=False)
-        if just_q:
-            log.warning(
-                "usda.ip_quarantined ip=%s reason=%d", served_by, resp.status_code,
-            )
-            _drain_pool()
+        # connection. Drain unconditionally — same rationale as the
+        # non-JSON case: force DNS re-resolve to escape a sticky edge.
+        _record_outcome(served_by, success=False)
+        log.warning(
+            "usda.transient_drain ip=%s reason=%d", served_by, resp.status_code,
+        )
+        _drain_pool()
         raise UsdaTransientError(
             f"USDA {resp.status_code}: {resp.text[:200]}",
             remote_ip=served_by,
@@ -402,8 +427,10 @@ def _get_json(path: str, params: dict[str, Any]) -> dict[str, Any]:
         return resp.json()
     except ValueError as exc:
         # Content-Type said JSON but body wasn't parseable. Truly
-        # transient — surface as such.
+        # transient — surface as such. Drain so the retry doesn't
+        # land on the same (possibly half-broken) edge.
         _record_outcome(served_by, success=False)
+        _drain_pool()
         raise UsdaTransientError(
             f"malformed JSON from {served_by}: {exc}; "
             f"body[:200]={resp.text[:200]!r}",

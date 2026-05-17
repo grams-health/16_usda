@@ -48,7 +48,11 @@ def _mock_response(
     if remote_ip is not None:
         resp.raw._connection.sock.getpeername.return_value = (remote_ip, 443)
     else:
-        resp.raw._connection.sock.getpeername.side_effect = AttributeError
+        # Make every introspection path fail so the helper returns
+        # None and the call bucketed under "unknown" in the snapshot.
+        # _remote_ip_from_response tries several attribute paths; we
+        # blank out raw entirely.
+        resp.raw = None
     return resp
 
 
