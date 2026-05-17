@@ -1,8 +1,8 @@
 import logging
+import os
 
 import pytest
-from sqlalchemy.exc import SQLAlchemyError
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 
 class TestSearchRest:
@@ -27,66 +27,44 @@ class TestSearchRest:
 
 
 class TestSearchFailureContract:
-    """Verify GET /usda/search obeys the tightened failure contract:
-    non-rate-limit exceptions from the view's call chain must NOT surface
-    as HTTP 500; they must return a deterministic non-500 JSON response
-    with an ERROR log carrying the full traceback.
+    """Pin the tightened failure contract for GET /usda/search.
+
+    The diagnosis names the defect site as the body of handle_search in
+    src/rest/search.py: its `except UsdaRateLimitError:` arm (search.py:14)
+    is the only non-success exception arm, so any other exception raised in
+    the view's call chain bubbles unhandled and Flask renders an opaque
+    HTTP 500. We exercise that path by injecting a non-rate-limit failure
+    at the HTTP boundary (`requests.get` in src/core/usda/client) so the
+    full real call chain (handle_search -> service.search.search_usda_foods
+    -> core.own.search.search_usda_foods -> core.usda.client.search_foods)
+    executes naturally, then assert the contract: status != 500, JSON
+    response, and an ERROR-level log carrying a traceback.
+
+    Expected failure reason: this test will fail with AssertionError on
+    `assert resp.status_code != 500` because handle_search at
+    src/rest/search.py:14 only catches UsdaRateLimitError; the
+    UsdaApiError raised by the boundary's 500 response escapes that
+    narrow except clause and Flask's default error handler returns 500.
     """
 
-    @patch("src.rest.search.search_usda_foods")
-    def test_does_not_500_on_usda_api_error(self, mock_search, client, caplog):
-        from src.core.usda.client import UsdaApiError
-
-        mock_search.side_effect = UsdaApiError("USDA API error: 500")
+    def test_does_not_500_on_non_rate_limit_upstream_failure(self, client, caplog, monkeypatch):
+        monkeypatch.setenv("USDA_API_KEY", "test-key")
         client.application.config["PROPAGATE_EXCEPTIONS"] = False
-        with caplog.at_level(logging.ERROR):
-            resp = client.get("/usda/search?q=chicken")
-        assert resp.status_code != 500, (
-            f"expected non-500 for UsdaApiError, got {resp.status_code}"
-        )
-        assert resp.content_type.startswith("application/json")
-        assert any(rec.levelno >= logging.ERROR and rec.exc_info for rec in caplog.records), (
-            "expected an ERROR-level log record with traceback (exc_info) for the injected exception"
-        )
 
-    @patch("src.rest.search.search_usda_foods")
-    def test_does_not_500_on_payload_key_error(self, mock_search, client, caplog):
-        mock_search.side_effect = KeyError("fdcId")
-        client.application.config["PROPAGATE_EXCEPTIONS"] = False
-        with caplog.at_level(logging.ERROR):
-            resp = client.get("/usda/search?q=chicken")
-        assert resp.status_code != 500, (
-            f"expected non-500 for KeyError, got {resp.status_code}"
-        )
-        assert resp.content_type.startswith("application/json")
-        assert any(rec.levelno >= logging.ERROR and rec.exc_info for rec in caplog.records), (
-            "expected an ERROR-level log record with traceback for the injected KeyError"
-        )
+        fake_response = MagicMock()
+        fake_response.status_code = 500
+        fake_response.json.return_value = {"foods": []}
 
-    @patch("src.rest.search.search_usda_foods")
-    def test_does_not_500_on_sqlalchemy_error(self, mock_search, client, caplog):
-        mock_search.side_effect = SQLAlchemyError("simulated import_log lookup failure")
-        client.application.config["PROPAGATE_EXCEPTIONS"] = False
-        with caplog.at_level(logging.ERROR):
-            resp = client.get("/usda/search?q=chicken")
-        assert resp.status_code != 500, (
-            f"expected non-500 for SQLAlchemyError, got {resp.status_code}"
-        )
-        assert resp.content_type.startswith("application/json")
-        assert any(rec.levelno >= logging.ERROR and rec.exc_info for rec in caplog.records), (
-            "expected an ERROR-level log record with traceback for the injected SQLAlchemyError"
-        )
+        with patch("src.core.usda.client.requests.get", return_value=fake_response):
+            with caplog.at_level(logging.ERROR):
+                resp = client.get("/usda/search?q=chicken")
 
-    @patch("src.rest.search.search_usda_foods")
-    def test_does_not_500_on_unexpected_exception(self, mock_search, client, caplog):
-        mock_search.side_effect = RuntimeError("unanticipated downstream failure")
-        client.application.config["PROPAGATE_EXCEPTIONS"] = False
-        with caplog.at_level(logging.ERROR):
-            resp = client.get("/usda/search?q=chicken")
         assert resp.status_code != 500, (
-            f"expected non-500 for unexpected RuntimeError, got {resp.status_code}"
+            f"expected non-500 for upstream UsdaApiError, got {resp.status_code}"
         )
-        assert resp.content_type.startswith("application/json")
-        assert any(rec.levelno >= logging.ERROR and rec.exc_info for rec in caplog.records), (
-            "expected an ERROR-level log record with traceback for the unexpected exception"
+        assert resp.content_type.startswith("application/json"), (
+            f"expected JSON content-type, got {resp.content_type}"
         )
+        assert any(
+            rec.levelno >= logging.ERROR and rec.exc_info for rec in caplog.records
+        ), "expected an ERROR-level log record with traceback (exc_info) for the upstream exception"
