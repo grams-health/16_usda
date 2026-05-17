@@ -73,7 +73,7 @@
     },
     "pactGenerator": {
       "name": "16_usda/tests/contract/12_admin_gateway-16_usda-exception-path.json",
-      "note": "Hand-authored consumer-driven pact interaction encoding the gateway's requirement that GET /usda/search returns Content-Type: application/json with a JSON body whose `error` field carries the exception class name when the inline request-service path raises an unanticipated Exception (e.g. KeyError from nutrient-field parsing when USDA omits optional fields, UsdaApiError, missing-credentials errors). Captures the exception-path interaction that the existing auto-generated 12_admin_gateway→16_usda pact in the broker does not cover."
+      "note": "Hand-authored consumer-driven pact interaction encoding the gateway's requirement that GET /usda/search returns Content-Type: application/json with a JSON body whose `error` field carries the exception class name when the inline request-service path raises an unanticipated Exception. Captures the exception-path interaction the auto-generated 12_admin_gateway-16_usda pact in the broker does not cover."
     }
   }
 }
