@@ -17,8 +17,30 @@ jobs:
           tags: test-image
       - run: docker run --rm test-image
 
+  contract-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: contract
+          load: true
+          tags: contract-image
+      - name: Connect to tailnet
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          version: latest
+      - name: Run contract tests
+        run: |
+          docker run --rm --network host \
+            -e PACT_BROKER_URL=${{ vars.PACT_BROKER_URL || 'http://localhost:9292' }} \
+            contract-image
+
   publish:
-    needs: test
+    needs: [test, contract-test]
     runs-on: ubuntu-latest
     permissions:
       contents: read
