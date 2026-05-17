@@ -1,0 +1,79 @@
+{
+  "consumer": {
+    "name": "12_admin_gateway"
+  },
+  "provider": {
+    "name": "16_usda"
+  },
+  "interactions": [
+    {
+      "description": "gateway forwards: a /usda/search request whose inline path raises an unanticipated Exception",
+      "providerStates": [
+        {
+          "name": "USDA search raises an unanticipated Exception on the inline request-service path"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/usda/search",
+        "headers": {
+          "Authorization": "Bearer pact-test-token",
+          "X-Admin-Id": "1",
+          "X-Admin-Email": "admin@test.com"
+        },
+        "query": {
+          "q": ["chicken"]
+        }
+      },
+      "response": {
+        "status": 500,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": "KeyError"
+        },
+        "matchingRules": {
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^application/json(;.*)?$"
+                }
+              ]
+            }
+          },
+          "body": {
+            "$.error": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "status": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "integer"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "pactSpecification": {
+      "version": "3.0.0"
+    },
+    "pactGenerator": {
+      "name": "16_usda/tests/contract/12_admin_gateway-16_usda-exception-path.json",
+      "note": "Hand-authored consumer-driven pact interaction encoding the gateway's requirement that GET /usda/search returns Content-Type: application/json with a JSON body whose `error` field carries the exception class name when the inline request-service path raises an unanticipated Exception (e.g. KeyError from nutrient-field parsing when USDA omits optional fields, UsdaApiError, missing-credentials errors). Captures the exception-path interaction that the existing auto-generated 12_admin_gateway→16_usda pact in the broker does not cover."
+    }
+  }
+}
