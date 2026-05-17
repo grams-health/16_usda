@@ -62,6 +62,8 @@ class _FakeResponse:
     def __init__(self, json_data, status_code=200):
         self._json = json_data
         self.status_code = status_code
+        self.headers = {"content-type": "application/json"}
+        self.raw = type("FakeRaw", (), {"_connection": None})()
 
     def json(self):
         return self._json
@@ -103,3 +105,22 @@ def _fake_post(url, json=None, **kwargs):
 
 _requests.get = _fake_get
 _requests.post = _fake_post
+
+# The production USDA client uses requests.Session().get(...), which
+# bypasses the module-level requests.get patch above. Patch Session
+# methods as well so provider verification doesn't try to reach the
+# real USDA API or admin service.
+_orig_session_get = _requests.Session.get
+_orig_session_post = _requests.Session.post
+
+
+def _fake_session_get(self, url, params=None, **kwargs):
+    return _fake_get(url, params=params, **kwargs)
+
+
+def _fake_session_post(self, url, json=None, **kwargs):
+    return _fake_post(url, json=json, **kwargs)
+
+
+_requests.Session.get = _fake_session_get
+_requests.Session.post = _fake_session_post
