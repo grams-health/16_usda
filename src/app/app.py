@@ -9,6 +9,15 @@ def health():
     return jsonify({"status": "healthy"}), 200
 
 
+@app.route("/health/usda", methods=["GET"])
+def health_usda():
+    """Per-IP health snapshot of upstream USDA edges. Operators check
+    this to see which DNS-load-balanced edge is misbehaving without
+    grepping logs. See client.ip_health_snapshot for the schema."""
+    from ..core.usda.client import ip_health_snapshot
+    return jsonify({"edges": ip_health_snapshot()}), 200
+
+
 # Initialize shared database
 from ..core.database import init_db, Base, get_engine
 
