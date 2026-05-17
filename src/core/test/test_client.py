@@ -120,8 +120,8 @@ class TestSearchFoods:
         )
         with pytest.raises(UsdaTransientError, match="500"):
             search_foods("chicken")
-        # Tenacity stop_after_attempt(30) for transient retries.
-        assert mock_get.call_count == 30
+        # Tenacity stop_after_attempt(100) for transient retries.
+        assert mock_get.call_count == 100
 
     @patch("src.core.usda.client._session.get")
     def test_search_rate_limited_raises(self, mock_get):
@@ -244,7 +244,7 @@ class TestMisroutedEdgeDefense:
             search_foods("chicken")
         assert excinfo.value.remote_ip == "15.200.48.244"
         assert "15.200.48.244" in str(excinfo.value)
-        assert mock_get.call_count == 30  # tenacity stop_after_attempt(30)
+        assert mock_get.call_count == 100  # tenacity stop_after_attempt(100)
 
     @patch("src.core.usda.client._session.get")
     def test_html_200_also_transient(self, mock_get):
@@ -311,7 +311,7 @@ class TestTransportFailures:
         mock_get.side_effect = requests_lib.exceptions.ReadTimeout("timed out")
         with pytest.raises(UsdaTransientError, match="ReadTimeout"):
             search_foods("chicken")
-        assert mock_get.call_count == 30  # retried
+        assert mock_get.call_count == 100  # retried
 
     @patch("src.core.usda.client._session.get")
     def test_connection_error_treated_as_transient(self, mock_get):
@@ -319,7 +319,7 @@ class TestTransportFailures:
         mock_get.side_effect = requests_lib.exceptions.ConnectionError("refused")
         with pytest.raises(UsdaTransientError, match="ConnectionError"):
             search_foods("chicken")
-        assert mock_get.call_count == 30
+        assert mock_get.call_count == 100
 
     @patch("src.core.usda.client._session.get")
     def test_malformed_json_response_is_transient(self, mock_get):
