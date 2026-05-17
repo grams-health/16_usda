@@ -1,15 +1,41 @@
+import logging
+
 from flask import request, jsonify
 from ..service.search import search_usda_foods
 from ..core.usda.client import UsdaRateLimitError
 
+logger = logging.getLogger(__name__)
+
 
 def handle_search():
-    query = request.args.get("q", "").strip()
-    if not query:
-        return jsonify({"status": "error", "message": "Missing or empty q parameter"}), 400
-
     try:
-        results = search_usda_foods(query)
-        return jsonify({"results": results}), 200
+        try:
+            query = request.args.get("q", "").strip()
+            if not query:
+                return jsonify({"status": "error", "message": "Missing or empty q parameter"}), 400
+            results = search_usda_foods(query)
+            return jsonify({"results": results}), 200
+        finally:
+            pass
     except UsdaRateLimitError:
-        return jsonify({"status": "error", "message": "USDA API rate limit exceeded"}), 429
+        try:
+            return jsonify({"status": "error", "message": "USDA API rate limit exceeded"}), 429
+        except Exception:
+            return (
+                '{"status": "error", "message": "USDA API rate limit exceeded"}',
+                429,
+                {"Content-Type": "application/json"},
+            )
+    except Exception:
+        try:
+            logger.exception("Unhandled exception in /usda/search")
+        except Exception:
+            pass
+        try:
+            return jsonify({"status": "error", "message": "Internal error in /usda/search"}), 503
+        except Exception:
+            return (
+                '{"status": "error", "message": "Internal error in /usda/search"}',
+                503,
+                {"Content-Type": "application/json"},
+            )
