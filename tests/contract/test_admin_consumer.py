@@ -132,3 +132,42 @@ class TestCreateFoodWithNutrients:
                     )
 
         assert ctx.value.food_name == "Chicken Breast"
+
+    def test_create_food_with_nutrients_includes_discrete_unit(self, pact):
+        """USDA foodPortions provides a discrete serving (e.g. a medium apple
+        at 182g). When present, the import forwards discrete_unit_name +
+        grams_per_discrete_unit so the grocery list can render a count hint
+        next to the weight (≈ 6 apples)."""
+        (
+            pact
+            .upon_receiving("a request to create a food with discrete display units")
+            .given("admin database is initialized")
+            .with_request("POST", "/foods/with-nutrients")
+            .with_header("Content-Type", "application/json")
+            .with_body({
+                "food_name": "Apple",
+                "nutrients": [
+                    {"nutrient_id": 1, "quantity": 0.005},
+                ],
+                "discrete_unit_name": "medium",
+                "grams_per_discrete_unit": 182,
+            }, content_type="application/json")
+            .will_respond_with(201)
+            .with_body({
+                "status": "success",
+                "message": match.str("Food created with 1 nutrients"),
+                "data": {"food_id": match.int(1)},
+            }, content_type="application/json")
+        )
+
+        with pact.serve() as srv:
+            with patch.dict(os.environ, {"ADMIN_SERVICE_URL": str(srv.url).rstrip("/")}):
+                from src.core.ref.admin.create_food import create_food_with_nutrients
+                result = create_food_with_nutrients(
+                    food_name="Apple",
+                    nutrients=[{"nutrient_id": 1, "quantity": 0.005}],
+                    discrete_unit_name="medium",
+                    grams_per_discrete_unit=182,
+                )
+
+        assert result["status"] == "success"

@@ -36,7 +36,12 @@ def import_usda_food(fdc_id: int) -> Status:
         for n in transformed.nutrients
     ]
     try:
-        result = create_food_with_nutrients(transformed.food_name, nutrients_payload)
+        result = create_food_with_nutrients(
+            transformed.food_name,
+            nutrients_payload,
+            discrete_unit_name=transformed.discrete_unit_name,
+            grams_per_discrete_unit=transformed.grams_per_discrete_unit,
+        )
     except AdminFoodConflictError:
         # Admin already has this food name — surface as duplicate.
         # Status.__bool__ returns False, REST handler returns 409.

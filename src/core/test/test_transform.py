@@ -144,3 +144,49 @@ class TestTransform:
         nmap = {203: 1}
         result = transform_food(detail, nmap)
         assert len(result.nutrients) == 0
+
+
+from ..typing.usda import UsdaFoodPortion
+
+
+class TestDiscretePortion:
+    def _detail_with_portions(self, portions):
+        return UsdaFoodDetail(
+            fdc_id=1,
+            description="Apple",
+            food_category="Fruits",
+            nutrients=[],
+            portions=portions,
+        )
+
+    def test_picks_medium_portion(self):
+        detail = self._detail_with_portions([
+            UsdaFoodPortion(unit_name="small", gram_weight=140.0),
+            UsdaFoodPortion(unit_name="medium", gram_weight=182.0),
+            UsdaFoodPortion(unit_name="large", gram_weight=230.0),
+        ])
+        result = transform_food(detail, {})
+        assert result.discrete_unit_name == "medium"
+        assert result.grams_per_discrete_unit == 182.0
+
+    def test_falls_back_to_whole(self):
+        detail = self._detail_with_portions([
+            UsdaFoodPortion(unit_name="whole", gram_weight=120.0),
+        ])
+        result = transform_food(detail, {})
+        assert result.discrete_unit_name == "whole"
+        assert result.grams_per_discrete_unit == 120.0
+
+    def test_no_preferred_unit_returns_none(self):
+        detail = self._detail_with_portions([
+            UsdaFoodPortion(unit_name="cup", gram_weight=240.0),
+        ])
+        result = transform_food(detail, {})
+        assert result.discrete_unit_name is None
+        assert result.grams_per_discrete_unit is None
+
+    def test_no_portions_returns_none(self):
+        detail = self._detail_with_portions([])
+        result = transform_food(detail, {})
+        assert result.discrete_unit_name is None
+        assert result.grams_per_discrete_unit is None

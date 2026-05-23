@@ -59,7 +59,47 @@ def transform_food(detail: UsdaFoodDetail, nutrient_map: dict) -> TransformedFoo
         for nid, qty in aggregated.items()
     ]
 
+    discrete_unit_name, grams_per_discrete_unit = _pick_discrete_portion(
+        getattr(detail, "portions", []) or []
+    )
+
     return TransformedFood(
         food_name=detail.description,
         nutrients=transformed,
+        discrete_unit_name=discrete_unit_name,
+        grams_per_discrete_unit=grams_per_discrete_unit,
     )
+
+
+_PREFERRED_PORTION_UNITS = ("medium", "whole", "each")
+
+
+def _pick_discrete_portion(portions: list) -> tuple[str | None, float | None]:
+    """Choose a sensible discrete portion from USDA foodPortions.
+
+    Prefers a "medium"/"whole"/"each" measureUnit (most universal — the
+    user thinks "an apple", not "a small apple"). Falls back to None if
+    no portion matches — bulk foods like flour and oils intentionally
+    have no portion data and stay null.
+
+    Returns (discrete_unit_name, grams_per_discrete_unit). The
+    discrete_unit_name uses the food's own noun where possible (extracted
+    from the description's first word) so the grocery list reads
+    "≈ 5 apples" not "≈ 5 mediums".
+    """
+    if not portions:
+        return None, None
+
+    chosen = None
+    for preferred in _PREFERRED_PORTION_UNITS:
+        for p in portions:
+            if str(p.unit_name).lower() == preferred:
+                chosen = p
+                break
+        if chosen is not None:
+            break
+
+    if chosen is None:
+        return None, None
+
+    return str(chosen.unit_name), float(chosen.gram_weight)
