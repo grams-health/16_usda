@@ -16,6 +16,21 @@ def _make_food_detail():
     )
 
 
+def _make_food_detail_with_portions():
+    from ..typing.usda import UsdaFoodPortion
+    return UsdaFoodDetail(
+        fdc_id=171688,
+        description="Apple",
+        food_category="Fruits",
+        nutrients=[
+            UsdaNutrient(number=203, name="Protein", value=0.3, unit="G"),
+        ],
+        portions=[
+            UsdaFoodPortion(unit_name="medium", gram_weight=182.0),
+        ],
+    )
+
+
 def _make_nutrient_map():
     return {203: 1, 204: 2}
 
@@ -124,3 +139,48 @@ class TestImportFood:
         import_usda_food(171077)
 
         mock_record.assert_called_once_with(171077, 47, "Chicken breast")
+
+
+    @patch("src.core.own.import_food.record_import")
+    @patch("src.core.own.import_food.create_food_with_nutrients")
+    @patch("src.core.own.import_food.get_nutrient_map")
+    @patch("src.core.own.import_food.get_food")
+    @patch("src.core.own.import_food.is_imported")
+    def test_import_forwards_discrete_portion_fields(self, mock_imported, mock_get_food, mock_nmap, mock_create, mock_record):
+        """When USDA returns foodPortions, the import forwards
+        discrete_unit_name + grams_per_discrete_unit to the admin
+        create call so the grocery list can render a count hint."""
+        from ..typing.status import Status
+        mock_imported.return_value = False
+        mock_get_food.return_value = _make_food_detail_with_portions()
+        mock_nmap.return_value = {203: 1}
+        mock_create.return_value = {"status": "success", "data": {"food_id": 99}}
+        mock_record.return_value = Status("success", "recorded")
+
+        import_usda_food(171688)
+
+        kwargs = mock_create.call_args.kwargs
+        assert kwargs.get("discrete_unit_name") == "medium"
+        assert kwargs.get("grams_per_discrete_unit") == 182.0
+
+    @patch("src.core.own.import_food.record_import")
+    @patch("src.core.own.import_food.create_food_with_nutrients")
+    @patch("src.core.own.import_food.get_nutrient_map")
+    @patch("src.core.own.import_food.get_food")
+    @patch("src.core.own.import_food.is_imported")
+    def test_import_bulk_food_omits_discrete_fields(self, mock_imported, mock_get_food, mock_nmap, mock_create, mock_record):
+        """Foods without a sensible portion (no medium/whole/each entry in
+        USDA foodPortions) — flour, oils, etc. — leave discrete fields as
+        None so admin persists them as bulk."""
+        from ..typing.status import Status
+        mock_imported.return_value = False
+        mock_get_food.return_value = _make_food_detail()  # no portions
+        mock_nmap.return_value = _make_nutrient_map()
+        mock_create.return_value = {"status": "success", "data": {"food_id": 47}}
+        mock_record.return_value = Status("success", "recorded")
+
+        import_usda_food(171077)
+
+        kwargs = mock_create.call_args.kwargs
+        assert kwargs.get("discrete_unit_name") is None
+        assert kwargs.get("grams_per_discrete_unit") is None
