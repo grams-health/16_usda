@@ -59,7 +59,7 @@ from tenacity import (
 )
 from urllib3.util.retry import Retry
 
-from ..typing.usda import UsdaFoodDetail, UsdaNutrient, UsdaSearchResult
+from ..typing.usda import UsdaFoodDetail, UsdaFoodPortion, UsdaNutrient, UsdaSearchResult
 
 
 log = logging.getLogger(__name__)
@@ -487,11 +487,28 @@ def _parse_food_detail(data: dict[str, Any]) -> UsdaFoodDetail:
             unit=nutrient.get("unitName", ""),
         ))
 
+    portions: list[UsdaFoodPortion] = []
+    for fp in data.get("foodPortions", []):
+        measure_unit = fp.get("measureUnit") or {}
+        unit_name = measure_unit.get("name") if isinstance(measure_unit, dict) else ""
+        gram_weight = fp.get("gramWeight")
+        if not unit_name or gram_weight in (None, 0):
+            continue
+        try:
+            portions.append(UsdaFoodPortion(
+                unit_name=str(unit_name),
+                gram_weight=float(gram_weight),
+                modifier=str(fp.get("modifier") or ""),
+            ))
+        except (ValueError, TypeError):
+            continue
+
     return UsdaFoodDetail(
         fdc_id=data["fdcId"],
         description=data["description"],
         food_category=food_category,
         nutrients=nutrients,
+        portions=portions,
     )
 
 
